@@ -53,3 +53,5 @@ summary_df = summary_df.replace(0, None)
 # 4. 최종 엑셀 파일로 저장
 summary_df.to_excel("/content/xsell/소집내역_최종요약표.xlsx", index_label="이름")
 print("\n[성공] 활동이 없는 칸이 모두 Null 처리되어 '소집내역_최종요약표.xlsx'로 저장되었습니다.")
+
+#파일명이랑 전체 행길이만 입력해주면됨
