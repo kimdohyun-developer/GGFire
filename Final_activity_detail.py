@@ -110,6 +110,6 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
             ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
         # ---------------------------------------------------------------------
         
-        print(f"   ▶ [{index + 1}번 시트] {sheet_name} 완료 (1행 항목 선작성 ➡️ 2행 데이터 주입 / {len(final_df)}건 안착)")
+        print(f"   ▶ [{index + 1}번 시트] {sheet_name} 완료 ({len(final_df)}건)")
 
 print(f"\n🎉 모든 분류 작업이 완료되었습니다! 최종 파일 확인: {output_file}")
