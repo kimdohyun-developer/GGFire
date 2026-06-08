@@ -6,7 +6,7 @@ from openpyxl import load_workbook
 load_wb = load_workbook("/content/xsell/2026년 소집내역(수당연계, 활동실적 계).xlsx", data_only=True)
 load_ws = load_wb['temp']
 
-start_row = 6 
+start_row = 6
 name_col = 4      # D열: 이름
 q_col = 17        # Q열: 수당 종류 항목
 amount_col = 13   # R열: 금액
@@ -35,16 +35,16 @@ for row_num in range(start_row, load_ws.max_row + 1):
     name_val = load_ws.cell(row=row_num, column=name_col).value
     q_val = load_ws.cell(row=row_num, column=q_col).value
     amount_val = load_ws.cell(row=row_num, column=amount_col).value
-    
+
     # 이름과 수당 종류가 모두 있는 데이터만 처리
     if name_val is not None and q_val is not None:
         name = str(name_val).strip()
         allowance_type = str(q_val).strip()
         amount = int(amount_val) if amount_val is not None else 0
-        
+
         # 현재 행의 수당 종류 딕셔너리를 타겟으로 지정
         current_allowance_dict = classified_dict[allowance_type]
-        
+
         # [핵심 알고리즘] 이름이 없으면 새로 추가, 있으면 금액 누적
         if name not in current_allowance_dict:
             current_allowance_dict[name] = amount  # 신규 등록
@@ -59,22 +59,24 @@ output_file_path = "/content/xsell/여비취합.xlsx"
 print("\n=== [이름별 수당 누적 합산 및 시트 저장 시작] ===")
 
 with pd.ExcelWriter(output_file_path, engine='openpyxl') as writer:
-    
+
     for allowance_type in unique_types:
         # { '홍길동': 30000, '김철수': 15000 } 형태의 딕셔너리 가져오기
         name_amount_dict = classified_dict[allowance_type]
-        
+
         # 딕셔너리를 판다스 표 구조로 변환하기 위해 리스트로 풀기
         data_list = []
         for name, total_amount in name_amount_dict.items():
             data_list.append([name, total_amount])
-            
+
         # 표(DataFrame) 생성
         df_summary = pd.DataFrame(data_list, columns=["이름", "금액"])
-        
+
+        df_summary = df_summary.sort_values(by="이름", ascending=True).reset_index(drop=True)
+
         # 요구하신 "번호" 컬럼을 1번부터 순서대로 맨 앞에 추가
         df_summary.insert(0, "번호", range(1, len(df_summary) + 1))
-        
+
         # 시트 저장 (글자수 31자 제한 안전장치 적용)
         sheet_name = allowance_type[:30]
         df_summary.to_excel(writer, sheet_name=sheet_name, index=False)
@@ -95,11 +97,11 @@ for allowance_type, name_dict in classified_dict.items():
     sheet_name = allowance_type[:30]
     sheet_total_amount = sum(name_dict.values())  # 해당 항목의 금액 총합
     sheet_people_count = len(name_dict)           # 해당 항목의 인원수
-    
+
     # 누적 전체 합계 계산
     grand_total_amount += sheet_total_amount
     grand_total_people += sheet_people_count
-    
+
     # 각 시트별 결과 출력 (천 단위 콤마 추가)
     print(f"▶ 시트명: [{sheet_name:<10}] | 인원: {sheet_people_count:3d}명 | 총 금액: {sheet_total_amount:11,}원")
 
