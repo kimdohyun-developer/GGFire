@@ -3,6 +3,73 @@ from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
+# 1. 파일 이름 설정
+input_file = "/content/xsell/2026년 소집내역(수당연계, 활동실적 계).xlsx"
+output_file = "/content/xsell/대별활동실적.xlsx"
+
+# 분류할 6개 소속(대) 목록
+sheet_names = ["산악전문대", "대학생전문대", "장안남성대", "장안여성대", "영통남성대", "영통여성대"]
+
+# 공백을 제거한 비교용 딕셔너리 생성 (띄어쓰기 오류 방지)
+sheet_mapping = {name.replace(" ", ""): name for name in sheet_names}
+
+# 순번 없이 원본에서 그대로 가져올 실제 열 번호 목록 (2열: 소속, 6열: 날짜, 14열: 대분류, 15열: 활동명칭)
+target_columns = [2, 6, 14, 15]
+
+# 2. 원본 파일 읽기 및 새 워크북 생성
+wb_source = load_workbook(input_file, data_only=True)
+ws_source = wb_source.active
+
+wb_target = Workbook()
+# 첫 번째 시트 이름 지정
+wb_target.active.title = sheet_names[0]
+
+# 두 번째 시트부터 순서대로 생성
+for name in sheet_names[1:]:
+    wb_target.create_sheet(title=name)
+
+# 6개 시트의 행 포인터 초기화 (각 시트의 1행부터 데이터 입력 시작)
+row_pointers = {name: 1 for name in sheet_names}
+
+# 3. 원본 데이터를 행별로 돌며 분류 및 복사
+for row_idx in range(1, ws_source.max_row + 1):
+    # 2열(소속) 값 가져오기
+    dept_val = ws_source.cell(row=row_idx, column=2).value
+    
+    if dept_val is not None:
+        clean_dept = str(dept_val).strip().replace(" ", "")
+        
+        # 일치하는 소속 시트가 있다면 데이터 복사 실행
+        if clean_dept in sheet_mapping:
+            target_sheet_name = sheet_mapping[clean_dept]
+            ws_target = wb_target[target_sheet_name]
+            
+            # 현재 시트에 채워야 할 행 번호
+            current_row = row_pointers[target_sheet_name]
+            
+            # 1열부터 빈칸 없이 추출한 4개의 열을 촘촘하게 채웁니다.
+            # t_idx는 새 시트의 열 번호 (1열부터 시작)
+            for t_idx, col_num in enumerate(target_columns, start=1):
+                cell_value = ws_source.cell(row=row_idx, column=col_num).value
+                
+                # 원본 6열(날짜) 데이터일 경우 문자열로 변환 후 뒤에서 8자리를 지움
+                if col_num == 6 and cell_value is not None:
+                    val_str = str(cell_value).strip()
+                    if len(val_str) > 8:
+                        cell_value = val_str[:-8]
+                
+                # 새 시트에 값 입력
+                ws_target.cell(row=current_row, column=t_idx).value = cell_value
+            
+            # 해당 시트의 다음 입력 위치를 1 증가
+            row_pointers[target_sheet_name] += 1
+
+# 4. 분류된 새 엑셀 파일 저장
+wb_target.save(output_file)
+
+print(f"🎉 번호 없이 [소속, 날짜, 14열, 15열] 데이터만 1행 1열부터 분류를 완료했습니다! -> {output_file}")
+
+
 # 1. 파일 경로 설정
 input_file = "/content/xsell/대별활동실적.xlsx"
 output_file = "/content/xsell/활동실적_최종집계.xlsx"
@@ -72,7 +139,7 @@ for sheet_name in sheet_names:
     ws_out = wb_out[sheet_name]
     
     # 3. 요약 표 작성 (1행 타이틀)
-    ws_out.cell(row=1, column=1, value=f"📊 [{sheet_name}] 활동 실적 최종 요약").font = font_title
+    ws_out.cell(row=1, column=1, value=f"📊 [{sheet_name}] 대별 활동").font = font_title
     
     # 2행: 요약 표 헤더 설정
     headers = ["항목(대분류)", "활동명(명칭)", "회차(횟수)", "참여 인원수"]
