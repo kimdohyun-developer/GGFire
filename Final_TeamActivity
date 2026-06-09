@@ -1,0 +1,123 @@
+import pandas as pd
+from openpyxl import load_workbook, Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+
+# 1. 파일 경로 설정
+input_file = "/content/xsell/대별활동실적.xlsx"
+output_file = "/content/xsell/활동실적_최종집계.xlsx"
+
+# 처리할 시트 목록
+sheet_names = ["산악전문대", "대학생전문대", "장안남성대", "장안여성대", "영통남성대", "영통여성대"]
+
+# 2. 결과 생성을 위한 엑셀 파일 열기 (원본 데이터 읽기용)
+wb_in = load_workbook(input_file, data_only=True)
+
+# 완전히 새로 채워 넣기 위해 깨끗한 새 Workbook 생성 (원본 데이터 제외)
+wb_out = Workbook()
+
+# 리스트의 첫 번째 값인 "산악전문대" 문자열을 첫 시트 이름으로 지정
+wb_out.active.title = sheet_names[0]
+
+# 두 번째 시트부터 순서대로 생성
+for name in sheet_names[1:]:
+    wb_out.create_sheet(title=name)
+
+# 가독성을 위한 서식/스타일 정의 (감청색 톤)
+font_title = Font(name="맑은 고딕", size=12, bold=True, color="1B365D")  
+font_header = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF") # 흰색 글씨 헤더
+font_data = Font(name="맑은 고딕", size=10)
+fill_header = PatternFill(start_color="1B365D", end_color="1B365D", fill_type="solid") # 감청색 배경
+align_center = Alignment(horizontal="center", vertical="center")
+align_left = Alignment(horizontal="left", vertical="center")
+thin_border = Border(
+    left=Side(style='thin', color='D9D9D9'),
+    right=Side(style='thin', color='D9D9D9'),
+    top=Side(style='thin', color='D9D9D9'),
+    bottom=Side(style='thin', color='D9D9D9')
+)
+
+for sheet_name in sheet_names:
+    if sheet_name not in wb_in.sheetnames:
+        continue
+        
+    ws_in = wb_in[sheet_name]
+    if ws_in.max_row == 0:
+        continue
+        
+    # 데이터 추출 (1열: 소속, 2열: 날짜, 3열: 대분류, 4열: 활동명칭)
+    data = []
+    for r in range(1, ws_in.max_row + 1):
+        row_vals = [ws_in.cell(row=r, column=c).value for c in range(1, 5)]
+        if row_vals[1] is not None and row_vals[3] is not None:
+            data.append(row_vals)
+            
+    if not data:
+        continue
+        
+    # 데이터프레임 변환
+    df = pd.DataFrame(data, columns=['소속', '날짜', '대분류', '활동명칭'])
+    
+    # [1단계 집계] 날짜와 활동명이 같은 중복 행을 카운트 (+1씩 누적하여 참여인원 계산)
+    group_date_name = df.groupby(['날짜', '대분류', '활동명칭']).size().reset_index(name='참여인원')
+    
+    # [2단계 집계] 날짜는 다르지만 활동명이 같은 데이터를 그룹화
+    # - 제거할 때마다 +1 카운트 (=회차)
+    # - 해당 활동명칭의 최종 누적 인원수 계산 (=총참여인원)
+    final_summary = group_date_name.groupby(['대분류', '활동명칭']).agg(
+        회차=('참여인원', 'count'),
+        총참여인원=('참여인원', 'sum')
+    ).reset_index()
+    
+    ws_out = wb_out[sheet_name]
+    
+    # 3. 요약 표 작성 (1행 타이틀)
+    ws_out.cell(row=1, column=1, value=f"📊 [{sheet_name}] 활동 실적 최종 요약").font = font_title
+    
+    # 2행: 요약 표 헤더 설정
+    headers = ["항목(대분류)", "활동명(명칭)", "회차(횟수)", "참여 인원수"]
+    for c_idx, header in enumerate(headers, start=1):
+        cell = ws_out.cell(row=2, column=c_idx, value=header)
+        cell.font = font_header
+        cell.fill = fill_header
+        cell.alignment = align_center
+        cell.border = thin_border
+        
+    # 3행부터 데이터 삽입
+    current_row = 3
+    for index, row in final_summary.iterrows():
+        vals = [
+            row['대분류'], 
+            row['활동명칭'], 
+            f"{row['회차']}",      # 맨 마지막에서 한 칸 앞 (회차)
+            f"{row['총참여인원']}"  # 맨 마지막 열 (참여 인원수)
+        ]
+        
+        for c_idx, val in enumerate(vals, start=1):
+            cell = ws_out.cell(row=current_row, column=c_idx, value=val)
+            cell.font = font_data
+            cell.border = thin_border
+            
+            if c_idx >= 3:
+                cell.alignment = align_center
+            else:
+                cell.alignment = align_left
+                
+        current_row += 1
+
+    # 📌 [완벽 수정 부] 튜플을 사용하지 않고 열 번호 숫자(1~4)로 안전하게 너비를 조절합니다.
+    for col_idx in range(1, 5):
+        # 해당 열의 모든 셀을 돌며 가장 긴 글자수 찾기
+        max_len = 0
+        for row_idx in range(1, current_row):
+            val = ws_out.cell(row=row_idx, column=col_idx).value
+            if val is not None:
+                max_len = max(max_len, len(str(val)))
+        
+        col_letter = get_column_letter(col_idx)
+        ws_out.column_dimensions[col_letter].width = max(max_len * 2 + 4, 16)
+
+# 5. 최종 결과 저장
+wb_out.save(output_file)
+
+print(f"🎉 모든 에러를 방지한 최종 요약 표 생성을 완료했습니다! -> {output_file}")
