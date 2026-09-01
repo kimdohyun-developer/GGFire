@@ -134,7 +134,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-# 1. 원본 엑셀 파일 로드
+# 1. 원본 엑셀 파일 로드 (환경에 맞게 object_file, object_sheet, month 변수를 설정해 주세요)
 load_wb = load_workbook(object_file, data_only=True)
 load_ws = load_wb[object_sheet]
 
@@ -143,6 +143,7 @@ name_col = 4      # 4열: 이름
 q_col = 17        # 17열: 수당 종류 항목
 amount_col = 13   # 13열: 금액
 
+# 고유한 수당 종류 목록 수집
 allowance_types = set()
 for row_num in range(start_row, load_ws.max_row + 1):
     q_value = load_ws.cell(row=row_num, column=q_col).value
@@ -152,6 +153,7 @@ for row_num in range(start_row, load_ws.max_row + 1):
 unique_types = sorted(list(allowance_types))
 classified_dict = {allowance_type: {} for allowance_type in unique_types}
 
+# 데이터 읽기 및 안전한 취합 처리
 for row_num in range(start_row, load_ws.max_row + 1):
     name_val = load_ws.cell(row=row_num, column=name_col).value
     q_val = load_ws.cell(row=row_num, column=q_col).value
@@ -160,7 +162,35 @@ for row_num in range(start_row, load_ws.max_row + 1):
     if name_val is not None and q_val is not None:
         name = str(name_val).strip()
         allowance_type = str(q_val).strip()
-        amount = int(amount_val) if amount_val is not None else 0
+        
+        # ----------------------------------------------------
+        # 🛠️ [핵심 보완] 금액 판단 알고리즘
+        # ----------------------------------------------------
+        # 기본값은 0원으로 설정
+        amount = 0
+        
+        if amount_val is not None:
+            # 문자열로 변환한 뒤 앞뒤 공백 제거
+            amount_str = str(amount_val).strip()
+            
+            # 쉼표(,)나 공백이 섞여있을 수 있으므로 미리 제거
+            amount_str_cleaned = amount_str.replace(",", "").replace(" ", "")
+            
+            # 값이 ' - ', '-', 또는 빈 칸("")인 경우 0원으로 처리하고 넘어감
+            if amount_str_cleaned in ["-", "", ".-", "-.", "0"]:
+                amount = 0
+            else:
+                try:
+                    # 일반 정수 변환 시도
+                    amount = int(amount_str_cleaned)
+                except ValueError:
+                    try:
+                        # 소수점이 포함된 경우(예: 50000.0) float 거쳐서 int 변환
+                        amount = int(float(amount_str_cleaned))
+                    except ValueError:
+                        # 숫자가 전혀 아닌 진짜 텍스트(예: "미지급")인 경우에만 0 처리
+                        amount = 0
+        # ----------------------------------------------------
 
         current_allowance_dict = classified_dict[allowance_type]
 
@@ -169,7 +199,7 @@ for row_num in range(start_row, load_ws.max_row + 1):
         else:
             current_allowance_dict[name] += amount
 
-output_file_path = "/content/소집수당 및 여비 취합("+month+"월).xlsx"
+output_file_path = f"/content/소집수당 및 여비 취합({month}월).xlsx"
 
 # 스타일 공통 정의
 font_title = Font(name="맑은 고딕", size=20, bold=True, color="000000")
@@ -181,7 +211,7 @@ align_center = Alignment(horizontal="center", vertical="center")
 align_left = Alignment(horizontal="left", vertical="center")
 align_right = Alignment(horizontal="right", vertical="center")
 
-# 🛠️ [핵심 변경] 모든 내부 칸 테두리 색상을 검은색('000000') 실선으로 변경
+# 모든 내부 칸 테두리 색상을 검은색('000000') 실선으로 변경
 side_thin = Side(style='thin', color='000000')       # 내부 기본 격자선 (검은색 얇은 실선)
 side_medium = Side(style='medium', color='000000')   # 표 외곽 마감선 (검은색 두꺼운 실선)
 
@@ -255,7 +285,7 @@ with pd.ExcelWriter(output_file_path, engine='openpyxl') as writer:
                         cell.alignment = align_center
                     ws.row_dimensions[row_idx].height = 20
 
-                # 🛠️ [테두리 알고리즘]
+                # [테두리 알고리즘]
                 # 1단계: 기본적으로 모든 칸에 사방 검은색 얇은 테두리(side_thin) 지정
                 left_border = side_thin
                 right_border = side_thin
